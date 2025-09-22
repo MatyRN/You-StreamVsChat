@@ -1,4 +1,4 @@
-<div align="center">
+ <div align="center">
   
 ![ui](/res/Titlegit.png)
 
@@ -8,8 +8,10 @@
 </div>
 
 <div align="center">
-  <img src="/res/Img_2.PNG" width="300" style="border:2px solid #500; border-radius:6px; margin:5px;">
-  <img src="/res/Img_3.PNG" width="300" style="border:2px solid #500; border-radius:6px; margin:5px;">
+
+| ![img2](/res/Img_2.PNG) | ![img3](/res/Img_3.PNG) |
+|-------------------------|-------------------------|
+
 </div>
 
 <p align="center">
