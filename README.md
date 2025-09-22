@@ -2,7 +2,7 @@
   
 ![ui](/res/Titlegit.png)
 
-![Video](https://www.youtube.com/watch?v=_KqlfxALWTI)
+[Demo Direct](https://www.youtube.com/watch?v=_KqlfxALWTI)
 
 </div>
 <p align="center">
