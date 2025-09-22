@@ -3,8 +3,18 @@
 ![ui](/res/Titlegit.png)
 
 [Test Demo](https://www.youtube.com/watch?v=_KqlfxALWTI)
+![OtherVideo](res/Veracidad.mp4)
 
 </div>
+
+<div align="center">
+
+  ![img](/res/IMG_1.png)
+  ![img2](/res/IMG_2.png)
+  ![img3](/res/IMG_3.png)
+
+</div>
+
 <p align="center">
   <a href="#english-">
     <img src="https://img.shields.io/badge/Language-English-blue?style=for-the-badge" alt="English" />
