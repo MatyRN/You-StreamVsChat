@@ -51,7 +51,6 @@ It enables interactive streams where viewers can send commands to:
 
  MIT License.
  
-=======================================================================
 
 ## Español-🇪🇸
 
