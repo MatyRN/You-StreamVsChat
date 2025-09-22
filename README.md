@@ -1,19 +1,18 @@
 <p align="center">
   <img src="/res/Title.png" alt="ui" width="800"/>
 </p>
-
-[![English](https://img.shields.io/badge/Language-English-blue)](#english-gb) 
-[![Español](https://img.shields.io/badge/Idioma-Español-green)](#español-)  
+<p align="center">
+[![English](https://img.shields.io/badge/Language-English-blue)](##english-🇬🇧) 
+[![Español](https://img.shields.io/badge/Idioma-Español-green)](##español-🇪🇸)  
 [![Download](https://img.shields.io/badge/⬇️-Download-red)](https://github.com/tuusuario/youstreamvschat/releases/latest)
+</p>
 
-##English gb:
+## English-🇬🇧:
 YouStreamVsChat is a desktop application that connects your Twitch or YouTube live chat with your games or OBS.
 It enables interactive streams where viewers can send commands to:
 
 - Control parts of a game (retro or modern).
-
 - Trigger specific actions (give items, press keys, etc.).
-
 - Manipulate elements inside OBS.
 
 ### ✨ Features
@@ -52,7 +51,7 @@ It enables interactive streams where viewers can send commands to:
 
 MIT License.
 =======================================================================
-##Español 🇪🇸
+## Español-🇪🇸
 
 YouStreamVsChat es una aplicación de escritorio que conecta el chat en vivo de Twitch o YouTube con tus juegos u OBS.
 Permite crear streams interactivos donde tu audiencia puede:
