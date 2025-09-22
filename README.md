@@ -1,8 +1,7 @@
 <div align="center">
-
 ![ui](/res/Titlegit.png)
-
 </div>
+
 [![English](https://img.shields.io/badge/Language-English-blue)](##english-🇬🇧) 
 [![Español](https://img.shields.io/badge/Idioma-Español-green)](##español-🇪🇸)  
 [![Download](https://img.shields.io/badge/⬇️-Download-red)](https://github.com/tuusuario/youstreamvschat/releases/latest)
