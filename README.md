@@ -5,13 +5,13 @@
 </div>
 <p align="center">
   <a href="#english-">
-    <img src="https://img.shields.io/badge/Language-English-blue?style=for-the-badge" alt="English" />
+    <img src="res/english_pixel.png" alt="English" />
   </a>
   <a href="#español-">
-    <img src="https://img.shields.io/badge/Idioma-Español-green?style=for-the-badge" alt="Español" />
+    <img src="res/spanish_pixel.png" alt="Español" />
   </a>
   <a href="https://github.com/tuusuario/youstreamvschat/releases/latest">
-    <img src="https://img.shields.io/badge/⬇️-Download-red?style=for-the-badge" alt="Download" />
+    <img src="res/download_pixel.png" alt="Download" />
   </a>
 </p>
 
