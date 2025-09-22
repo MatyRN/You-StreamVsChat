@@ -1,5 +1,6 @@
-# You:StreamVSChat
-![ui](/res/Title.png)
+<p align="center">
+  <img src="/res/Title.png" alt="ui" width="800"/>
+</p>
 
 [![English](https://img.shields.io/badge/Language-English-blue)](#english-gb) 
 [![Español](https://img.shields.io/badge/Idioma-Español-green)](#español-)  
