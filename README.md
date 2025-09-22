@@ -10,7 +10,7 @@
   <a href="#español-">
     <img src="https://img.shields.io/badge/Idioma-Español-green?style=for-the-badge" alt="Español" />
   </a>
-  <a href="[https://github.com/tuusuario/youstreamvschat/releases/latest](https://github.com/MatyRN/You-StreamVsChat/releases/download/V1.0/YouStreamVSChat.zip)">
+  <a href="[https://github.com/MatyRN/You-StreamVsChat/releases/download/V1.0/YouStreamVSChat.zip)">
     <img src="https://img.shields.io/badge/⬇️-Download-red?style=for-the-badge" alt="Download" />
   </a>
 </p>
