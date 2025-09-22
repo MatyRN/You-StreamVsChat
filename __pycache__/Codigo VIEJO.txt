@@ -1,0 +1,1387 @@
+import sys, time, random, json, os, queue, threading
+from tkinter import dialog
+from PySide6.QtWidgets import (QApplication, QLabel, QVBoxLayout, QWidget, QHBoxLayout, QLineEdit, QPushButton, QDialog, QMessageBox, QTextEdit, QGridLayout, QComboBox, QFrame, QMainWindow, QMenuBar, QMenu, QCheckBox, QSpinBox, QGroupBox, QFormLayout, QDialogButtonBox, QScrollArea, QDoubleSpinBox)
+from PySide6.QtCore import Qt, QTimer, Signal, Slot, QObject, QMetaObject, Q_ARG
+from PySide6.QtGui import (QFont, QColor, QPalette, QPixmap, QPainter, QAction, QIcon)
+
+import pytchat
+import pyautogui
+import pydirectinput
+import re
+import concurrent.futures
+import keyboard
+import socket
+import requests
+import traceback
+
+# Import keyboard functions
+try:
+    from YouStream_VSChat_KeyCodes import *
+except ImportError:
+    print("❌ Error: Could not import YouStream_VSChat_KeyCodes.py")
+    # Create dummy variables to avoid errors
+    NUMPAD_0 = NUMPAD_1 = NUMPAD_2 = NUMPAD_3 = NUMPAD_4 = NUMPAD_5 = 0
+    NUMPAD_6 = NUMPAD_7 = NUMPAD_8 = NUMPAD_9 = NUMPAD_PLUS = 0
+    NUMPAD_MINUS = NUMPAD_MULTIPLY = NUMPAD_PERIOD = SPACE = 0
+    LEFT_MOUSE = RIGHT_MOUSE = MOUSE_WHEEL_UP = MOUSE_WHEEL_DOWN = 0
+    LEFT_ARROW = RIGHT_ARROW = UP_ARROW = DOWN_ARROW = ESC = 0
+    ONE = TWO = THREE = FOUR = FIVE = SIX = SEVEN = EIGHT = NINE = ZERO = 0
+    MINUS = EQUALS = BACKSPACE = APOSTROPHE = SEMICOLON = TAB = 0
+    CAPSLOCK = ENTER = LEFT_CONTROL = LEFT_ALT = LEFT_SHIFT = 0
+    RIGHT_SHIFT = TILDE = PRINTSCREEN = NUM_LOCK = DELETE = 0
+    COMMA = PERIOD = BACKSLASH = FORWARDSLASH = LEFT_BRACKET = 0
+    RIGHT_BRACKET = F1 = F2 = F3 = F4 = F5 = F6 = F7 = F8 = F9 = 0
+    F10 = F11 = F12 = 0
+
+# Class for signals between threads
+class ThreadSignals(QObject):
+    update_ui = Signal(str, bool)  
+    update_command = Signal(str)    
+    update_stats = Signal()         
+    update_donation_display = Signal()  
+    update_connection_status = Signal(str, str) 
+
+# Twitch Implementation
+class TwitchConnection:
+    re_prog = None
+    sock = None
+    partial = b''
+    login_ok = False
+    channel = ''
+    login_timestamp = 0
+    MAX_TIME_TO_WAIT_FOR_LOGIN = 3
+
+    def __init__(self, channel):
+        self.channel = channel
+        self.connect()
+
+    def connect(self):
+        if self.sock:
+            self.sock.close()
+        self.sock = None
+        self.partial = b''
+        self.login_ok = False
+
+        # Compile regular expression
+        self.re_prog = re.compile(b'^(?::(?:([^ !\r\n]+)![^ \r\n]*|[^ \r\n]*) )?([^ \r\n]+)(?: ([^:\r\n]*))?(?: :([^\r\n]*))?\r\n', re.MULTILINE)
+
+        # Create socket
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # Attempt to connect socket
+        try:
+            self.sock.connect(('irc.chat.twitch.tv', 6667))
+        except Exception as e:
+            print(f"Error connecting to Twitch: {e}")
+            return False
+
+        # Log in anonymously
+        user = 'justinfan%i' % random.randint(10000, 99999)
+        self.sock.send(('PASS asdf\r\nNICK %s\r\n' % user).encode())
+
+        self.sock.settimeout(1.0/60.0)
+        self.login_timestamp = time.time()
+        return True
+
+    # Attempt to reconnect after a delay
+    def reconnect(self, delay):
+        time.sleep(delay)
+        return self.connect()
+
+    # Returns a list of irc messages received
+    def receive_and_parse_data(self):
+        buffer = b''
+        while True:
+            received = b''
+            try:
+                received = self.sock.recv(4096)
+            except socket.timeout:
+                break
+            except Exception as e:
+                print(f'Unexpected connection error: {e}')
+                self.reconnect(1)
+                return []
+            if not received:
+                print('Connection closed by Twitch. Reconnecting...')
+                self.reconnect(5)
+                return []
+            buffer += received
+
+        if buffer:
+            # Prepend unparsed data from previous iterations
+            if self.partial:
+                buffer = self.partial + buffer
+                self.partial = b''
+
+            # Parse irc messages
+            res = []
+            matches = list(self.re_prog.finditer(buffer))
+            for match in matches:
+                res.append({
+                    'name':     (match.group(1) or b'').decode(errors='replace'),
+                    'command':  (match.group(2) or b'').decode(errors='replace'),
+                    'params':   list(map(lambda p: p.decode(errors='replace'), (match.group(3) or b'').split(b' '))),
+                    'trailing': (match.group(4) or b'').decode(errors='replace'),
+                })
+
+            # Save any data we couldn't parse for the next iteration
+            if not matches:
+                self.partial += buffer
+            else:
+                end = matches[-1].end()
+                if end < len(buffer):
+                    self.partial = buffer[end:]
+
+            return res
+
+        return []
+
+    def receive_messages(self):
+        privmsgs = []
+        for irc_message in self.receive_and_parse_data():
+            cmd = irc_message['command']
+            if cmd == 'PRIVMSG':
+                privmsgs.append({
+                    'username': irc_message['name'],
+                    'message': irc_message['trailing'],
+                })
+            elif cmd == 'PING':
+                self.sock.send(b'PONG :tmi.twitch.tv\r\n')
+            elif cmd == '001':
+                print('Successfully logged in. Joining channel %s.' % self.channel)
+                self.sock.send(('JOIN #%s\r\n' % self.channel).encode())
+                self.login_ok = True
+            elif cmd == 'JOIN':
+                print('Successfully joined channel %s' % irc_message['params'][0])
+            elif cmd == 'NOTICE':
+                print('Server notice:', irc_message['params'], irc_message['trailing'])
+            elif cmd in ['002', '003', '004', '375', '372', '376', '353', '366']:
+                continue  # Ignore these standard IRC messages
+            else:
+                print('Unhandled irc message:', irc_message)
+
+        if not self.login_ok:
+            # We are still waiting for the initial login message
+            if time.time() - self.login_timestamp > self.MAX_TIME_TO_WAIT_FOR_LOGIN:
+                print('No response from Twitch. Reconnecting...')
+                self.reconnect(0)
+                return []
+
+        return privmsgs
+
+    def close(self):
+        if self.sock:
+            self.sock.close()
+            self.sock = None
+
+# Initial setup
+BACKGROUND_COLOR = QColor(20, 20, 30)
+PRIMARY_COLOR = QColor(255, 215, 0)
+SECONDARY_COLOR = QColor(0, 255, 0)
+TEXT_COLOR = QColor(255, 255, 255)
+DESCRIPTION_COLOR = QColor(200, 200, 200)
+GENERAL_TITLE = "You:Stream VS Chat"
+
+# Global configuration variables
+DISABLE_MULTI = False
+DISABLE_NORMAL_COMMANDS = False
+MESSAGE_RATE = 0.5
+MAX_QUEUE_LENGTH = 10
+MAX_WORKERS = 10
+PAUSE_COMMANDS = False
+PAUSE_TOGGLE_KEY = "F12"
+
+# Approximate exchange rates
+EXCHANGE_RATES = {
+    "USD": 1.0, "MXN": 0.06, "ARS": 0.0012, "BRL": 0.2, 
+    "EUR": 1.1, "GBP": 1.3, "CLP": 0.0011, "COP": 0.00026, "PEN": 0.27
+}
+
+# Donation multiplier system
+DONATION_TIERS = {
+    1: {"multiplier": 1, "color": "🟢", "name": "Mini Don", "color_hex": "#00FF00"},
+    5: {"multiplier": 2, "color": "🔵", "name": "Mid Don", "color_hex": "#0080FF"},
+    10: {"multiplier": 3, "color": "🟣", "name": "Big Don", "color_hex": "#8000FF"},
+    20: {"multiplier": 4, "color": "🟠", "name": "Mega Don", "color_hex": "#FF8000"},
+    50: {"multiplier": 5, "color": "🔴", "name": "ÉPIC Don", "color_hex": "#FF0000"}
+}
+
+# Key mapping dictionary for the combobox
+KEY_MAPPING_DICT = {
+    "NUMPAD_0": NUMPAD_0,
+    "NUMPAD_1": NUMPAD_1,
+    "NUMPAD_2": NUMPAD_2,
+    "NUMPAD_3": NUMPAD_3,
+    "NUMPAD_4": NUMPAD_4,
+    "NUMPAD_5": NUMPAD_5,
+    "NUMPAD_6": NUMPAD_6,
+    "NUMPAD_7": NUMPAD_7,
+    "NUMPAD_8": NUMPAD_8,
+    "NUMPAD_9": NUMPAD_9,
+    "NUMPAD_PLUS": NUMPAD_PLUS,
+    "NUMPAD_MINUS": NUMPAD_MINUS,
+    "NUMPAD_PERIOD": NUMPAD_PERIOD,
+    "MULTIPLY_KEY": NUMPAD_MULTIPLY,
+    "SPACE": SPACE,
+    "LEFT_MOUSE": LEFT_MOUSE,
+    "RIGHT_MOUSE": RIGHT_MOUSE,
+    "MOUSE_WHEEL_UP": MOUSE_WHEEL_UP,    
+    "MOUSE_WHEEL_DOWN": MOUSE_WHEEL_DOWN,
+    "TAB": TAB,
+    "ENTER": ENTER,
+    "LEFT_ARROW": LEFT_ARROW,
+    "RIGHT_ARROW": RIGHT_ARROW,
+    "UP_ARROW": UP_ARROW,
+    "DOWN_ARROW": DOWN_ARROW,
+    "A": A,
+    "B": B,
+    "C": C,
+    "D": D,
+    "E": E,
+    "F": F,
+    "G": G,
+    "H": H,
+    "I": I,
+    "J": J,
+    "K": K,
+    "L": L,
+    "M": M,
+    "N": N,
+    "O": O,
+    "P": P,
+    "Q": Q,
+    "R": R,
+    "S": S,
+    "T": T,
+    "U": U,
+    "V": V,
+    "W": W,
+    "X": X,
+    "Y": Y,
+    "Z": Z
+}
+
+# Setting default commands (using full keypad)
+COMMAND_CONFIG = {
+    "cmd1": {"key": NUMPAD_0, "display": "!action1", "command": "!action1", "enabled": True},
+    "cmd2": {"key": NUMPAD_1, "display": "!action2", "command": "!action2", "enabled": True},
+    "cmd3": {"key": NUMPAD_2, "display": "!action3", "command": "!action3", "enabled": True},
+    "cmd4": {"key": NUMPAD_3, "display": "!action4", "command": "!action4", "enabled": True},
+    "cmd5": {"key": NUMPAD_4, "display": "!action5", "command": "!action5", "enabled": True},
+    "cmd6": {"key": NUMPAD_5, "display": "!action6", "command": "!action6", "enabled": True},
+    "cmd7": {"key": NUMPAD_6, "display": "!action7", "command": "!action7", "enabled": True},
+    "cmd8": {"key": NUMPAD_7, "display": "!action8", "command": "!action8", "enabled": True},
+    "cmd9": {"key": NUMPAD_8, "display": "!action9", "command": "!action9", "enabled": True},
+    "cmd10": {"key": NUMPAD_9, "display": "!action10", "command": "!action10", "enabled": True},
+    "cmd11": {"key": NUMPAD_PLUS, "display": "!action11", "command": "!action11", "enabled": True},
+    "cmd12": {"key": NUMPAD_MINUS, "display": "!action12", "command": "!action12", "enabled": True},
+    "cmd13": {"key": NUMPAD_MULTIPLY, "display": "!action13", "command": "!action13", "enabled": True},
+    "cmd14": {"key": NUMPAD_PERIOD, "display": "!action14", "command": "!action14", "enabled": True},
+}
+
+# Variables for command spam control
+command_cooldowns = {}
+COMMAND_COOLDOWN = 3.0
+
+## === Setup Window === ##
+class SetupDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon("res/Icon.ico"))
+        self.setWindowTitle(GENERAL_TITLE + " - Setup -")
+        self.setGeometry(200, 200, 500, 500)
+        self.platform = "youtube"
+        self.video_id = ""
+        self.twitch_channel = ""
+        
+        self.setStyleSheet(f"""
+            background-color: {BACKGROUND_COLOR.name()}; 
+            color: {TEXT_COLOR.name()};
+            font-family: 'Courier New';
+        """)
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        
+        pixmap = QPixmap("res/Title.png")
+        if not pixmap.isNull():
+            image_label = QLabel()
+            image_label.setPixmap(pixmap.scaled(350, 150))
+            image_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(image_label)
+        else:
+            error_label = QLabel("❌ Image not found")
+            layout.addWidget(error_label)
+
+        subtitle = QLabel("• Connection Settings •")
+        subtitle.setFont(QFont("Courier New", 22, QFont.Bold))
+        subtitle.setStyleSheet(f"color: {TEXT_COLOR.name()}; padding: 5px;")
+        subtitle.setAlignment(Qt.AlignCenter)
+        layout.addWidget(subtitle)
+
+        platform_layout = QVBoxLayout()
+        platform_label = QLabel("Platform:")
+        platform_label.setFont(QFont("Courier New", 15, QFont.Bold))
+        platform_label.setStyleSheet(f"color: {DESCRIPTION_COLOR.name()};")
+        platform_label.setAlignment(Qt.AlignCenter)
+        platform_layout.addWidget(platform_label)
+        
+        self.platform_combo = QComboBox()
+        self.platform_combo.addItems(["YouTube", "Twitch"])
+        self.platform_combo.setStyleSheet(f"""
+            background-color: {QColor(40, 40, 50).name()};
+            color: {TEXT_COLOR.name()};
+            padding: 8px;
+            border: 2px solid #555;
+            border-radius: 4px;
+            font-family: 'Courier New';
+            font-size: 14px;
+        """)
+        self.platform_combo.currentTextChanged.connect(self.platform_changed)
+        platform_layout.addWidget(self.platform_combo)
+        layout.addLayout(platform_layout)
+        
+        self.yt_container = QFrame()
+        self.yt_container.setFrameStyle(QFrame.NoFrame)
+        self.yt_layout = QVBoxLayout(self.yt_container)
+        
+        yt_label = QLabel("YouTube Video ID:")
+        yt_label.setFont(QFont("Courier New", 14, QFont.Bold))
+        yt_label.setStyleSheet(f"color: {DESCRIPTION_COLOR.name()};")
+        yt_label.setAlignment(Qt.AlignCenter)
+        self.yt_layout.addWidget(yt_label)
+        
+        self.id_input = QLineEdit()
+        self.id_input.setStyleSheet(f"""
+            background-color: {QColor(40, 40, 50).name()};
+            color: {TEXT_COLOR.name()};
+            padding: 12px;
+            border: 2px solid #555;
+            border-radius: 4px;
+            font-family: 'Courier New';
+            font-size: 14px;
+        """)
+        self.id_input.setPlaceholderText("Ej: E9otDwF0x48")
+        self.id_input.setAlignment(Qt.AlignCenter)
+        self.yt_layout.addWidget(self.id_input)
+        layout.addWidget(self.yt_container)
+        
+        self.twitch_container = QFrame()
+        self.twitch_container.setFrameStyle(QFrame.NoFrame)
+        self.twitch_container.setVisible(False)
+        self.twitch_layout = QVBoxLayout(self.twitch_container)
+        
+        twitch_label = QLabel("Twitch channel:")
+        twitch_label.setFont(QFont("Courier New", 14, QFont.Bold))
+        twitch_label.setStyleSheet(f"color: {DESCRIPTION_COLOR.name()};")
+        twitch_label.setAlignment(Qt.AlignCenter)
+        self.twitch_layout.addWidget(twitch_label)
+        
+        self.twitch_input = QLineEdit()
+        self.twitch_input.setStyleSheet(f"""
+            background-color: {QColor(40, 40, 50).name()};
+            color: {TEXT_COLOR.name()};
+            padding: 12px;
+            border: 2px solid #555;
+            border-radius: 4px;
+            font-family: 'Courier New';
+            font-size: 14px;
+        """)
+        self.twitch_input.setPlaceholderText("Ej: matiasrn1")
+        self.twitch_input.setAlignment(Qt.AlignCenter)
+        self.twitch_input.setText("matiasrn1")
+        self.twitch_layout.addWidget(self.twitch_input)
+        layout.addWidget(self.twitch_container)
+        
+        instructions = QLabel(
+            "---------------------Instructions----------------------\n"
+            "• YouTube: Video ID (11 characters after 'v=')\n"
+            "• Twitch: Channel name (all lowercase)\n\n"
+            "---------------------Data----------------------\n"
+            "• Super Chats/Bits will activate multipliers!\n"
+            "• Test mode available for testing"
+        )
+        instructions.setFont(QFont("Courier New", 9))
+        instructions.setStyleSheet(f"color: {DESCRIPTION_COLOR.name()};")
+        instructions.setAlignment(Qt.AlignCenter)
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        
+        button_layout = QHBoxLayout()
+        
+        test_btn = QPushButton("🎮 Test Mode 🎮")
+        test_btn.clicked.connect(self.use_test_mode)
+        test_btn.setStyleSheet("""
+            background-color: #FFA500; 
+            color: black; 
+            font-weight: bold;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Courier New';
+            border: 2px solid #CC8400;
+        """)
+        
+        connect_btn = QPushButton("🔴 Connect 🔴")
+        connect_btn.clicked.connect(self.connect_platform)
+        connect_btn.setStyleSheet("""
+            background-color: #FF0000; 
+            color: white; 
+            font-weight: bold;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Courier New';
+            border: 2px solid #CC0000;
+        """)
+        
+        button_layout.addWidget(test_btn)
+        button_layout.addWidget(connect_btn)
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def platform_changed(self, platform):
+        if platform == "YouTube":
+            self.yt_container.setVisible(True)
+            self.twitch_container.setVisible(False)
+            self.platform = "youtube"
+        else:
+            self.yt_container.setVisible(False)
+            self.twitch_container.setVisible(True)
+            self.platform = "twitch"
+    
+    def use_test_mode(self):
+        self.video_id = "TEST_MODE"
+        self.twitch_channel = "TEST_MODE"
+        self.accept()
+    
+    def connect_platform(self):
+        if self.platform == "youtube":
+            video_id = self.id_input.text().strip()
+            if re.match(r'^[a-zA-Z0-9_-]{11}$', video_id):
+                self.video_id = video_id
+                self.twitch_channel = ""
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Invalid ID", "YouTube ID must be 11 alphanumeric characters.")
+        else:
+            twitch_channel = self.twitch_input.text().strip().lower()
+            if twitch_channel:
+                self.twitch_channel = twitch_channel
+                self.video_id = ""
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Invalid Channel", "Please enter a valid Twitch channel name.")
+
+## === Command Config Dialog === #
+class CommandConfigDialog(QDialog):
+    def __init__(self, command_config, parent=None):
+        super().__init__(parent)
+        self.command_config = command_config.copy()
+        self.setWindowTitle("Configuration Commands")
+        self.setFixedSize(600, 700)  
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout()
+    
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+    
+        for cmd_key, config in self.command_config.items():
+            group = QGroupBox(config["display"])
+            group.setStyleSheet(f"""
+                QGroupBox {{
+                    font-weight: bold;
+                    color: {TEXT_COLOR.name()};
+                    border: 2px solid #555;
+                    border-radius: 5px;
+                    margin-top: 1ex;
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 5px 0 5px;
+                    color: {PRIMARY_COLOR.name()};
+                }}
+            """)
+        
+            form_layout = QFormLayout()
+        
+            # Field to edit the command text (what users type in chat)
+            command_edit = QLineEdit(config["command"])
+            command_edit.setStyleSheet(f"""
+                background-color: {QColor(40, 40, 50).name()};
+                color: {TEXT_COLOR.name()};
+                padding: 5px;
+                border: 1px solid #555;
+                border-radius: 3px;
+            """)
+            command_edit.textChanged.connect(lambda text, c=cmd_key: self.update_command_text(c, text))
+            form_layout.addRow("Command:", command_edit)
+        
+            # Field to edit the display name
+            name_edit = QLineEdit(config["display"])
+            name_edit.setStyleSheet(f"""
+                background-color: {QColor(40, 40, 50).name()};
+                color: {TEXT_COLOR.name()};
+                padding: 5px;
+                border: 1px solid #555;
+                border-radius: 3px;
+            """)
+            name_edit.textChanged.connect(lambda text, c=cmd_key: self.update_display_name(c, text))
+            form_layout.addRow("Display:", name_edit)
+        
+            enabled_cb = QCheckBox("Enable")
+            enabled_cb.setChecked(config["enabled"])
+            enabled_cb.toggled.connect(lambda checked, c=cmd_key: self.toggle_command(c, checked))
+            form_layout.addRow("Status:", enabled_cb)
+        
+            # ComboBox to select key
+            key_combo = QComboBox()
+            key_combo.addItems(list(KEY_MAPPING_DICT.keys()))
+        
+            # Find the name of the current key
+            current_key_name = None
+            for name, key_code in KEY_MAPPING_DICT.items():
+                if key_code == config["key"]:
+                    current_key_name = name
+                    break
+        
+            if current_key_name:
+                key_combo.setCurrentText(current_key_name)
+        
+            key_combo.currentTextChanged.connect(lambda text, c=cmd_key: self.update_key(c, KEY_MAPPING_DICT[text]))
+            key_combo.setStyleSheet(f"""
+                background-color: {QColor(40, 40, 50).name()};
+                color: {TEXT_COLOR.name()};
+                padding: 5px;
+                border: 1px solid #555;
+                border-radius: 3px;
+            """)
+            form_layout.addRow("Key:", key_combo)
+        
+            group.setLayout(form_layout)
+            content_layout.addWidget(group)
+    
+        content_layout.addStretch()
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+    
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+    
+        self.setLayout(layout)
+    
+    def toggle_command(self, cmd_key, enabled):
+        self.command_config[cmd_key]["enabled"] = enabled
+
+    def update_key(self, cmd_key, key):
+        self.command_config[cmd_key]["key"] = key
+    
+    def update_display_name(self, cmd_key, display_name):
+        if display_name.strip() and not display_name.startswith("!"):
+            display_name = "!" + display_name
+    
+        if cmd_key in self.command_config:
+            self.command_config[cmd_key]["display"] = display_name
+
+    def update_command_text(self, cmd_key, command_text):
+        if command_text.strip() and not command_text.startswith("!"):
+            command_text = "!" + command_text
+    
+        if cmd_key in self.command_config:
+            self.command_config[cmd_key]["command"] = command_text
+
+    def get_updated_config(self):
+        return self.command_config
+
+## === Donation Multiplier == ##
+class DonationMultipliersDialog(QDialog):
+    def __init__(self, donation_tiers, parent=None):
+        super().__init__(parent)
+        self.donation_tiers = donation_tiers.copy()
+        self.setWindowTitle("Donation Multipliers")
+        self.setFixedSize(400, 400)
+        self.setup_ui()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        
+        instructions = QLabel("Set donation thresholds and their multipliers:")
+        instructions.setStyleSheet(f"color: {DESCRIPTION_COLOR.name()};")
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        
+        for amount, tier_info in sorted(self.donation_tiers.items()):
+            group = QGroupBox(f"${amount}+ - {tier_info['name']}")
+            group.setStyleSheet(f"""
+                QGroupBox {{
+                    font-weight: bold;
+                    color: {TEXT_COLOR.name()};
+                    border: 2px solid {tier_info['color_hex']};
+                    border-radius: 5px;
+                    margin-top: 1ex;
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 5px 0 5px;
+                    color: {tier_info['color_hex']};
+                }}
+            """)
+            
+            form_layout = QFormLayout()
+            
+            multiplier_spin = QSpinBox()
+            multiplier_spin.setRange(1, 20)
+            multiplier_spin.setValue(tier_info["multiplier"])
+            multiplier_spin.valueChanged.connect(lambda value, a=amount: self.update_multiplier(a, value))
+            form_layout.addRow("Multiplier:", multiplier_spin)
+            
+            group.setLayout(form_layout)
+            content_layout.addWidget(group)
+        
+        content_layout.addStretch()
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        dialog.setLayout(layout)
+    
+    def update_multiplier(self, amount, multiplier):
+        self.donation_tiers[amount]["multiplier"] = multiplier
+
+## === MAIN Window === ##
+class MainWindow(QMainWindow):
+    def __init__(self, platform, video_id="", twitch_channel=""):
+        super().__init__()
+        self.setWindowIcon(QIcon("res/Icon.ico"))
+        self.platform = platform
+        self.video_id = video_id
+        self.twitch_channel = twitch_channel
+        self.setWindowTitle(GENERAL_TITLE)
+        self.setGeometry(100, 100, 500, 700)
+        self.setFixedSize(500, 700)
+        
+        self.setStyleSheet(f"""
+            background-color: {BACKGROUND_COLOR.name()};
+            color: {TEXT_COLOR.name()};
+            font-family: 'Courier New';
+        """)
+        
+        self.current_command = "Waiting for commands..."
+        self.messages = []
+        self.donations = []
+        self.users = {}
+        self.total_messages = 0
+        self.total_donated = 0.0
+        self.chat = None
+        self.twitch_connection = None
+        self.simulation_mode = (video_id == "TEST_MODE" or twitch_channel == "TEST_MODE")
+        self.command_config = COMMAND_CONFIG.copy()
+        
+        self.last_message_count = 0
+        self.last_donation_total = 0.0
+        self.last_chat_text = ""
+        
+        # Queue for YouTube messages
+        self.youtube_queue = queue.Queue()
+        self.youtube_thread = None
+        self.youtube_running = False
+        
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        
+        self.setup_ui()
+        self.create_menu_bar()
+        
+        # Initialize timers
+        self.ui_timer = QTimer()
+        self.ui_timer.timeout.connect(self.update_interface)
+        self.ui_timer.start(100)
+        
+        self.chat_timer = QTimer()
+        self.chat_timer.timeout.connect(self.process_chat_messages)
+        self.chat_timer.start(150)
+        
+        self.pause_timer = QTimer()
+        self.pause_timer.timeout.connect(self.check_pause_key)
+        self.pause_timer.start(100)
+        
+        if not self.simulation_mode:
+            if self.platform == "youtube":
+                self.init_pytchat()
+            else:
+                self.init_twitch()
+        else:
+            self.connection_label.setText("🎮 Test Mode Activated")
+            self.connection_label.setStyleSheet("color: #FFA500;")
+            self.simulate_donations()
+
+    def youtube_listener(self):
+        """Thread to listen to YouTube messages without blocking the UI"""
+        while self.youtube_running and self.chat and self.chat.is_alive():
+            try:
+                chat_data = self.chat.get()
+                if chat_data is not None and hasattr(chat_data, 'sync_items'):
+                    for item in chat_data.sync_items():
+                        if hasattr(item, 'type') and item.type == "superChat":
+                            self.youtube_queue.put(("superchat", item))
+                        else:
+                            self.youtube_queue.put(("message", item))
+                time.sleep(0.1)  # Short pause to avoid excessive CPU usage
+            except Exception as e:
+                print(f"Error in youtube_listener: {e}")
+                time.sleep(1)  # Longer pause in case of error
+
+    def toggle_normal_commands(self, checked):
+        global DISABLE_NORMAL_COMMANDS
+        DISABLE_NORMAL_COMMANDS = checked
+        status = "DISABLED" if checked else "ACTIVATED"
+        self.add_message(f"System: Normal Commands {status}")
+
+    def toggle_donation_commands(self, checked):
+        global DISABLE_MULTI
+        DISABLE_MULTI = checked
+        status = "DISABLED" if checked else "ACTIVATED"
+        self.add_message(f"System: Donation Commands {status}")
+
+    def configure_message_speed(self):
+        global MESSAGE_RATE
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Message Speed")
+        dialog.setFixedSize(300, 150)
+        dialog.setStyleSheet(f"""
+            background-color: {BACKGROUND_COLOR.name()};
+            color: {TEXT_COLOR.name()};
+            font-family: 'Courier New';
+        """)
+        
+        layout = QVBoxLayout()
+        
+        label = QLabel("Time between messages (seconds):")
+        label.setStyleSheet(f"color: {DESCRIPTION_COLOR.name()};")
+        layout.addWidget(label)
+        
+        spinbox = QDoubleSpinBox()
+        spinbox.setRange(0.1, 5.0)
+        spinbox.setSingleStep(0.1)
+        spinbox.setValue(MESSAGE_RATE)
+        spinbox.setStyleSheet(f"""
+            background-color: {QColor(40, 40, 50).name()};
+            color: {TEXT_COLOR.name()};
+            padding: 8px;
+            border: 2px solid #555;
+            border-radius: 4px;
+        """)
+        layout.addWidget(spinbox)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        buttons.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {PRIMARY_COLOR.name()};
+                color: black;
+                padding: 8px;
+                border-radius: 4px;
+                font-family: 'Courier New';
+            }}
+        """)
+        layout.addWidget(buttons)
+        
+        dialog.setLayout(layout)
+        
+        if dialog.exec():
+            MESSAGE_RATE = spinbox.value()
+            self.add_message(f"System: Message speed adjusted a {MESSAGE_RATE} seconds")
+
+    def configure_key_mapping(self):
+        dialog = CommandConfigDialog(self.command_config, self)
+        if dialog.exec():
+            self.command_config = dialog.get_updated_config()
+            commands_text = ", ".join([config["display"] for config in self.command_config.values() if config["enabled"]])
+            self.commands_desc.setText(commands_text)
+            self.add_message("System: Command configuration updated")
+
+    def configure_donation_multipliers(self):
+        dialog = DonationMultipliersDialog(DONATION_TIERS, self)
+        dialog.exec()
+
+    def check_pause_key(self):
+        global PAUSE_COMMANDS
+        try:
+            if keyboard.is_pressed(PAUSE_TOGGLE_KEY):
+                PAUSE_COMMANDS = not PAUSE_COMMANDS
+                status = "PAUSE" if PAUSE_COMMANDS else "RESUME"
+                color = "#FF0000" if PAUSE_COMMANDS else "#00FF00"
+                icon = "⏸️" if PAUSE_COMMANDS else "▶️"
+                
+                self.pause_label.setText(f"{icon} Commands {status} ({PAUSE_TOGGLE_KEY})")
+                self.pause_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+                
+                self.add_message(f"System: Commands {status} (Press {PAUSE_TOGGLE_KEY})")
+                time.sleep(0.3)
+                return True
+        except:
+            pass
+        return False
+
+    def process_chat_messages(self):
+        if self.simulation_mode:
+            self.update_simulation()
+        elif self.platform == "youtube" and self.chat:
+            self.process_youtube_chat()
+        elif self.platform == "twitch" and self.twitch_connection:
+            self.process_twitch_chat()
+
+    def process_youtube_chat(self):
+        """Process YouTube messages from the queue (non-blocking)"""
+        try:
+            while not self.youtube_queue.empty():
+                msg_type, item = self.youtube_queue.get_nowait()
+                
+                if msg_type == "superchat":
+                    self.process_superchat(item)
+                else:
+                    chat_msg = f"{item.author.name}: {item.message}"
+                    self.process_normal_message(chat_msg)
+                    
+        except queue.Empty:
+            pass 
+        except Exception as e:
+            print(f"Error processing YouTube chat: {e}")
+            if not self.simulation_mode:
+                self.connection_label.setText("🔴 YouTube error, simulation mode")
+                self.connection_label.setStyleSheet("color: #FF0000;")
+                self.add_message("System: ❌ Error on YouTube, activating simulation mode")
+                self.simulation_mode = True
+                self.simulate_donations()
+
+    def process_twitch_chat(self):
+        try:
+            messages = self.twitch_connection.receive_messages()
+            for message in messages:
+                chat_msg = f"{message['username']}: {message['message']}"
+                self.process_normal_message(chat_msg)
+                
+        except Exception as e:
+            print(f"Error processing Twitch chat: {e}")
+            if not self.simulation_mode:
+                self.connection_label.setText("🔴 Error on Twitch, simulation mode")
+                self.connection_label.setStyleSheet("color: #FF0000;")
+                self.add_message("System: ❌ Error on Twitch, activating simulation mode")
+                self.simulation_mode = True
+                self.simulate_donations()
+
+    def create_menu_bar(self):
+        menu_bar = QMenuBar(self)
+        menu_bar.setStyleSheet("""
+            QMenuBar {
+                background-color: #2A2A3A;
+                color: white;
+                font-family: 'Courier New';
+            }
+            QMenuBar::item:selected {
+                background-color: #FFD700;
+                color: black;
+            }
+            QMenu {
+                background-color: #2A2A3A;
+                color: white;
+                border: 1px solid #555;
+            }
+            QMenu::item:selected {
+                background-color: #FFD700;
+                color: black;
+            }
+        """)
+        
+        config_menu = QMenu("&Configuration", self)
+        
+        disable_normal_action = QAction("Disable Normal Commands", self)
+        disable_normal_action.setCheckable(True)
+        disable_normal_action.setChecked(DISABLE_NORMAL_COMMANDS)
+        disable_normal_action.triggered.connect(self.toggle_normal_commands)
+        
+        disable_donation_action = QAction("Disable Donation Commands", self)
+        disable_donation_action.setCheckable(True)
+        disable_donation_action.setChecked(DISABLE_MULTI)
+        disable_donation_action.triggered.connect(self.toggle_donation_commands)
+        
+        speed_action = QAction("Message Speed", self)
+        speed_action.triggered.connect(self.configure_message_speed)
+        
+        keys_action = QAction("Configure Commands", self)
+        keys_action.triggered.connect(self.configure_key_mapping)
+        
+        multipliers_action = QAction("Donation Multipliers", self)
+        multipliers_action.triggered.connect(self.configure_donation_multipliers)
+        
+        config_menu.addAction(disable_normal_action)
+        config_menu.addAction(disable_donation_action)
+        config_menu.addSeparator()
+        config_menu.addAction(speed_action)
+        config_menu.addAction(keys_action)
+        config_menu.addAction(multipliers_action)
+        
+        menu_bar.addMenu(config_menu)
+        self.setMenuBar(menu_bar)
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        self.connection_label = QLabel("🟡 Getting started...")
+        self.connection_label.setFont(QFont("Courier New", 11, QFont.Bold))
+        self.connection_label.setStyleSheet(f"color: {QColor(255, 165, 0).name()};")
+        self.connection_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.connection_label)
+        
+        self.pause_label = QLabel("▶️ Commands ACTIVATED (F12)")
+        self.pause_label.setFont(QFont("Courier New", 10, QFont.Bold))
+        self.pause_label.setStyleSheet("color: #00FF00; font-weight: bold;")
+        self.pause_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.pause_label)
+        
+        self.command_label = QLabel(self.current_command)
+        self.command_label.setFont(QFont("Courier New", 12))
+        self.command_label.setStyleSheet(f"""
+            background-color: {QColor(40, 40, 50).name()};
+            color: {TEXT_COLOR.name()};
+            padding: 12px;
+            border-radius: 8px;
+            border: 2px solid #555;
+        """)
+        self.command_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.command_label)
+        
+        stats_layout = QHBoxLayout()
+        stats_layout.addStretch()
+        self.stats_label = QLabel("Messages: 0 | Donations: $0.00")
+        self.stats_label.setFont(QFont("Courier New", 11))
+        self.stats_label.setStyleSheet(f"color: {SECONDARY_COLOR.name()};")
+        self.stats_label.setAlignment(Qt.AlignCenter)
+        stats_layout.addWidget(self.stats_label)
+        stats_layout.addStretch()
+        layout.addLayout(stats_layout)
+        donation_title = QLabel("💎 Recent Donations")
+        donation_title.setFont(QFont("Courier New", 12, QFont.Bold))
+        donation_title.setStyleSheet("color: #FFD700;")
+        donation_title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(donation_title)
+        
+        self.donation_display = QTextEdit()
+        self.donation_display.setFont(QFont("Courier New", 10))
+        self.donation_display.setStyleSheet("""
+            background-color: #2A2A3A;
+            color: #FFD700;
+            padding: 8px;
+            border-radius: 6px;
+            border: 2px solid #FFD700;
+        """)
+        self.donation_display.setReadOnly(True)
+        self.donation_display.setMaximumHeight(70)
+        layout.addWidget(self.donation_display)
+        
+        commands_label = QLabel("• Commands •")
+        commands_label.setFont(QFont("Courier New", 12, QFont.Bold))
+        commands_label.setStyleSheet(f"color: {TEXT_COLOR.name()};")
+        commands_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(commands_label)
+        
+        commands_text = ", ".join([config["display"] for config in self.command_config.values() if config["enabled"]])
+        self.commands_desc = QLabel(commands_text)
+        self.commands_desc.setFont(QFont("Courier New", 10))
+        self.commands_desc.setStyleSheet(f"""
+            color: {QColor(0,150,50).name()};
+            background-color: {QColor(40, 40, 50).name()};
+            padding: 10px;
+            border-radius: 6px;
+        """)
+        self.commands_desc.setWordWrap(True)
+        self.commands_desc.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.commands_desc)
+        
+        chat_title = QLabel("💬 Live Chat 💬")
+        chat_title.setFont(QFont("Courier New", 12, QFont.Bold))
+        chat_title.setStyleSheet(f"color: {TEXT_COLOR.name()};")
+        chat_title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(chat_title)
+        
+        self.chat_display = QTextEdit()
+        self.chat_display.setFont(QFont("Courier New", 10))
+        self.chat_display.setStyleSheet(f"""
+            background-color: {QColor(40, 40, 50).name()};
+            color: {TEXT_COLOR.name()};
+            padding: 10px;
+            border-radius: 6px;
+            border: 2px solid #555;
+        """)
+        self.chat_display.setReadOnly(True)
+        layout.addWidget(self.chat_display)
+        
+        self.central_widget.setLayout(layout)
+
+    def init_pytchat(self):
+        try:
+            self.connection_label.setText("🟡 Connecting to YouTube...")
+            self.chat = pytchat.create(video_id=self.video_id)
+            if self.chat is None or not self.chat.is_alive():
+                raise Exception("Error with YouTube chat")
+            
+            # Start thread to listen to YouTube messages
+            self.youtube_running = True
+            self.youtube_thread = threading.Thread(target=self.youtube_listener, daemon=True)
+            self.youtube_thread.start()
+            
+            self.connection_label.setText("🟢 Connected to YouTube Live!")
+            self.connection_label.setStyleSheet("color: #32CD32;")
+            
+            self.add_message("System: ✅ Successful connection with YouTube")
+            self.add_message("System: 💎 Super Chats activated!")
+            
+        except Exception as e:
+            error_msg = f"Error: {str(e)}"
+            self.connection_label.setText("🔴 Connection error")
+            self.connection_label.setStyleSheet("color: #FF0000;")
+            self.add_message(f"System: ❌ {error_msg}")
+            self.add_message("System: 🎮 Activating simulation mode")
+            self.simulation_mode = True
+            self.simulate_donations()
+
+    def init_twitch(self):
+        try:
+            self.connection_label.setText("🟡 Connecting to Twitch...")
+            self.twitch_connection = TwitchConnection(self.twitch_channel)
+            
+            time.sleep(1) 
+            
+            self.connection_label.setText("🟢 Connected to Twitch!")
+            self.connection_label.setStyleSheet("color: #32CD32;")
+            
+            self.add_message("System: ✅ Successful connection to Twitch")
+            self.add_message("System: 💎 Bits/donations activated!")
+            
+        except Exception as e:
+            error_msg = f"Error: {str(e)}"
+            self.connection_label.setText("🔴 Twitch connection error")
+            self.connection_label.setStyleSheet("color: #FF0000;")
+            self.add_message(f"System: ❌ {error_msg}")
+            self.add_message("System: 🎮 Activating simulation mode")
+            self.simulation_mode = True
+            self.simulate_donations()
+
+    def process_attack_commands(self, message):
+        global PAUSE_COMMANDS
+        if DISABLE_NORMAL_COMMANDS or PAUSE_COMMANDS:
+            return
+
+        self.check_pause_key()
+        current_time = time.time()
+
+        words = message.lower().split()
+        for word in words:
+            for cmd_key, config in self.command_config.items():
+                command_text = config.get("command", cmd_key).lower()
+                if word == command_text and config["enabled"]:
+                    if cmd_key in command_cooldowns:
+                        if current_time - command_cooldowns[cmd_key] < COMMAND_COOLDOWN:
+                            continue
+                    command_cooldowns[cmd_key] = current_time
+                    self.process_game_command(cmd_key)  
+                    return
+
+    def hold_key(self, key):
+        """Hold down a key using imported functions"""
+        try:
+            HoldKey(key)
+        except Exception as e:
+            print(f"Error in hold_key: {e}")
+
+    def release_key(self, key):
+        """Release a key using imported functions"""
+        try:
+            ReleaseKey(key)
+        except Exception as e:
+            print(f"Error in release_key: {e}")
+
+    def hold_and_release_key(self, key, seconds):
+        """Hold and release a key"""
+        try:
+            self.hold_key(key)
+            time.sleep(seconds)
+            self.release_key(key)
+        except Exception as e:
+            print(f"Error in hold_and_release_key: {e}")
+
+    def process_superchat(self, superchat):
+        try:
+            amount = superchat.amountValue
+            currency = superchat.currency
+            message = superchat.message
+            user = superchat.author.name
+            usd_amount = self.convert_to_usd(amount, currency)
+            multiplier = self.calculate_multiplier(usd_amount)
+            donation_info = {
+                "amount": usd_amount,
+                "original_amount": amount,
+                "currency": currency,
+                "message": message,
+                "user": user,
+                "timestamp": time.time()
+            }
+            self.donations.append(donation_info)
+            self.total_donated += usd_amount
+            donation_text = f"💰 {user} donated ${amount} {currency} → x{multiplier}!"
+            
+            self.add_message(donation_text, is_donation=True)
+            
+            if message.strip():
+                self.apply_donation_effects(message, multiplier)
+            
+            self.update_donation_display()
+            self.update_stats()
+                                    
+        except Exception as e:
+            print(f"Error processing Super Chat: {e}")
+
+    def process_normal_message(self, message):
+        self.current_command = f"📩 {message}"
+        self.command_label.setText(self.current_command)
+        self.add_message(message)
+        self.process_attack_commands(message.lower())
+
+    def apply_donation_effects(self, message, multiplier):
+        global PAUSE_COMMANDS
+    
+        if DISABLE_MULTI or PAUSE_COMMANDS:
+            return
+    
+        self.check_pause_key()
+        current_time = time.time()
+        processed_commands = set()
+    
+        words = message.lower().split()
+    
+        for word in words:
+            for cmd_key, config in self.command_config.items():
+                command_text = config.get("command", cmd_key).lower()
+                if word == command_text and config["enabled"]:
+                    if cmd_key in command_cooldowns:
+                        if current_time - command_cooldowns[cmd_key] < COMMAND_COOLDOWN:
+                            continue
+                
+                    if cmd_key in processed_commands:
+                        continue
+                    
+                    processed_commands.add(cmd_key)
+                    command_cooldowns[cmd_key] = current_time
+                
+                    for _ in range(multiplier):
+                        self.process_game_command(cmd_key)
+                    break
+
+    def convert_to_usd(self, amount, currency):
+        return amount * EXCHANGE_RATES.get(currency, 1.0)
+
+    def calculate_multiplier(self, usd_amount):
+        for threshold in sorted(DONATION_TIERS.keys(), reverse=True):
+            if usd_amount >= threshold:
+                return DONATION_TIERS[threshold]["multiplier"]
+        return 1
+
+    def simulate_donations(self):
+        test_donations = [
+            (2.0, "USD", "Great stream! !shoot"),
+            (5.0, "USD", "Grab a coffee !drive"),
+            (12.0, "USD", "Epic! !shoot"),
+            (25.0, "USD", "For the content !aim up"),
+            (50.0, "USD", "GREAT DONATION! KEEP IT UP! !aim right")
+        ]
+        for amount, currency, message in test_donations:
+            delay = random.randint(15, 45)
+            QTimer.singleShot(delay * 1000, 
+                            lambda a=amount, c=currency, m=message: self.simulate_donation(a, c, m))
+
+    def simulate_donation(self, amount, currency, message):
+        if self.simulation_mode:
+            usd_amount = self.convert_to_usd(amount, currency)
+            multiplier = self.calculate_multiplier(usd_amount)
+            donation_info = {
+                "amount": usd_amount,
+                "original_amount": amount,
+                "currency": currency,
+                "message": message,
+                "user": f"Simulator{random.randint(1, 100)}",
+                "timestamp": time.time()
+            }
+            self.donations.append(donation_info)
+            self.total_donated += usd_amount
+            donation_text = f"💰 {donation_info['user']} donó {amount} {currency} → x{multiplier}!"
+            self.add_message(donation_text, is_donation=True)
+            if message.strip():
+                self.apply_donation_effects(message, multiplier)
+            self.update_donation_display()
+            self.update_stats()
+
+    def get_key_for_command(self, command):
+        for cmd, config in self.command_config.items():
+            if cmd == command and config["enabled"]:
+                return config["key"]
+        return None
+
+    def process_game_command(self, command):
+        try:
+            cmd = command.lower().strip()
+            print(f"🎮 Execute: {cmd}")
+            
+            config = None
+            for cmd_key, cmd_config in self.command_config.items():
+                if cmd == cmd_key.lower() and cmd_config["enabled"]:
+                    config = cmd_config
+                    break
+            
+            if not config:
+                return
+                
+            key = config["key"]
+            
+            # Continuous motion commands
+            if key in [NUMPAD_0, NUMPAD_1, NUMPAD_2, NUMPAD_3, NUMPAD_4, NUMPAD_5, NUMPAD_6, NUMPAD_7]:
+                if cmd in ["!drive", "!reverse"]:
+                    # Logic of continuous motion
+                    if cmd == "!drive":
+                        opposite_key = self.get_key_for_command("!reverse")
+                        if opposite_key:
+                            self.release_key(opposite_key)
+                    elif cmd == "!reverse":
+                        opposite_key = self.get_key_for_command("!drive")
+                        if opposite_key:
+                            self.release_key(opposite_key)
+                    self.hold_key(key)
+                else:
+                    # Short press commands
+                    self.hold_and_release_key(key, 0.1)
+            else:
+                # Normal keys
+                self.hold_and_release_key(key, 0.1)
+                
+        except Exception as e:
+            print(f"Command error: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def add_message(self, message, is_donation=False):
+        self.messages.append(message)
+        self.total_messages += 1
+        
+        if ":" in message:
+            username = message.split(":")[0].strip()
+            if username in self.users:
+                self.users[username] += 1
+            else:
+                self.users[username] = 1
+
+    def update_interface(self):
+        if len(self.messages) > 15:
+            self.messages = self.messages[-15:]
+        
+        chat_text = "\n".join(self.messages)
+        
+        if self.last_chat_text != chat_text:
+            self.chat_display.setPlainText(chat_text)
+            self.chat_display.verticalScrollBar().setValue(
+                self.chat_display.verticalScrollBar().maximum()
+            )
+            self.last_chat_text = chat_text
+        
+        if (self.total_messages != self.last_message_count or 
+            abs(self.total_donated - self.last_donation_total) > 0.01):
+            self.stats_label.setText(f"Messages: {self.total_messages} | Donation: ${self.total_donated:.2f}")
+            self.last_message_count = self.total_messages
+            self.last_donation_total = self.total_donated
+
+    def update_simulation(self):
+        enabled_commands = [config["display"] for config in self.command_config.values() if config["enabled"]]
+        test_messages = [
+            "JuanPerez: Hello everyone!",
+            "MariaGarcia: Great stream!",
+            "Satoriwana: " + random.choice(enabled_commands) if enabled_commands else "!drive",
+            "John China: How does the system work?",
+            "Gabe Newella: " + random.choice(enabled_commands) if enabled_commands else "!shoot",
+            "ViewerAnonymous: I love this game",
+            "ChatEnthusiast: " + random.choice(enabled_commands) if enabled_commands else "!brake",
+            "CoolStreamer: I've been watching the stream for 2 hours 👍",
+            "LoyalViewer: " + random.choice(enabled_commands) if enabled_commands else "!right",
+            "NewSubscriber: I just subscribed!"
+        ]
+        
+        if random.random() < 0.03:
+            random_message = random.choice(test_messages)
+            self.process_normal_message(random_message)
+
+    def update_stats(self):
+        self.stats_label.setText(f"Messages: {self.total_messages} | Donation: ${self.total_donated:.2f}")
+
+    def update_donation_display(self):
+        recent_donations = self.donations[-3:]
+        donation_text = "\n".join([
+            f"${d['amount']:.2f}: {d['message'][:15]}..." 
+            for d in recent_donations
+        ])
+        self.donation_display.setText(donation_text)
+
+    def closeEvent(self, event):
+        # Stop YouTube thread
+        self.youtube_running = False
+        
+        if self.chat:
+            try:
+                self.chat.terminate()
+            except:
+                pass
+        if self.twitch_connection:
+            try:
+                self.twitch_connection.close()
+            except:
+                pass
+        event.accept()
+
+if __name__ == "__main__":
+    import os
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    os.environ["QT_SCALE_FACTOR"] = "1"
+    os.environ["QT_ENABLE_HIGHDPI_SCALE"] = "0"
+    
+    app = QApplication(sys.argv)
+    
+    setup_dialog = SetupDialog()
+    if setup_dialog.exec():
+        platform = setup_dialog.platform
+        video_id = setup_dialog.video_id
+        twitch_channel = setup_dialog.twitch_channel
+        
+        if platform == "youtube":
+            print(f"🚀 Getting started with YouTube ID: {video_id}")
+        else:
+            print(f"🚀 Getting Started with Twitch Channel: {twitch_channel}")
+        
+        window = MainWindow(platform, video_id, twitch_channel)
+        window.show()
+        sys.exit(app.exec())
