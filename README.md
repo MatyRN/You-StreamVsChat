@@ -18,7 +18,7 @@
   <a href="#english-">
     <img src="https://img.shields.io/badge/Language-English-blue?style=for-the-badge" alt="English" />
   </a>
- <a href="["https://github.com/MatyRN/You-StreamVsChat/releases/download/V1.0.1/YouStreamVSChat.1.0.1.zip"> 
+  <a href="https://github.com/MatyRN/You-StreamVsChat/releases/download/V1.0.1/YouStreamVSChat.1.0.1.zip"> 
     <img src="https://img.shields.io/badge/⬇️-Download-red?style=for-the-badge" alt="Download" width="250px" />
   </a>
   <a href="#español-">
