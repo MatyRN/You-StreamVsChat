@@ -3,7 +3,7 @@
 ![ui](/res/Titlegit.png)
 
 [Test Demo](https://www.youtube.com/watch?v=_KqlfxALWTI)
-[OtherVideo](res/Veracidad.gif)
+![OtherVideo](res/Veracidad.gif)
 
 </div>
 
