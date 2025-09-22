@@ -1,7 +1,9 @@
 <div align="center">
   
 ![ui](/res/Titlegit.png)
-  
+
+[Video Demo]([https://www.youtube.com/watch?v=ID_DEL_VIDEO](https://www.youtube.com/watch?v=_KqlfxALWTI))
+
 </div>
 <p align="center">
   <a href="#english-">
@@ -59,7 +61,7 @@ It enables interactive streams where viewers can send commands to:
 
  MIT License.
 
-# You can help me improve this show and make more.
+# ✨ You can help me improve this show and make more ✨
 As I said, with your Coffee or Ko-Fi, you can help me continue updating this show and bring more projects to YouTube. Or you can also contact me and ask me for a specific project, and we can chat.
 
 ## Español-🇪🇸
@@ -100,5 +102,5 @@ Permite crear streams interactivos donde tu audiencia puede:
 
 MIT License.
 
-# Pueden ayudarme a mejorar este programa y a hacer mas programas.
+# ✨ Pueden ayudarme a mejorar este programa y a hacer mas programas ✨
 Tal y como lo digo, con su Cafesito o Ko-Fi me pueden ayudar a seguir actualizando este programa y a traer mas proyectos para youtube, o tambien puedes conctactarme y pedirme algun proyecto especifico y charlamos.
