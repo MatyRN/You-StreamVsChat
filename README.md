@@ -3,13 +3,12 @@
 ![ui](/res/Titlegit.png)
 
 [Test Demo](https://www.youtube.com/watch?v=_KqlfxALWTI)
-![OtherVideo](res/Veracidad.mp4)
+[OtherVideo](res/Veracidad.mp4)
 
 </div>
 
 <div align="center">
 
-  ![img](/res/Img_1.PNG)
   ![img2](/res/Img_2.PNG)
   ![img3](/res/Img_3.PNG)
 
