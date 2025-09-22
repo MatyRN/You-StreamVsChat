@@ -53,7 +53,7 @@ It enables interactive streams where viewers can send commands to:
 ### ⚙️ Installation
 
 1. You download the program above in the button that says "Download", Extract the program to any folder.
-2. Run YouStreamVsChat.exe.
+2. Run YouStreamVsChat.exe as administrator mode (Otherwise you'll get an error, but if you don't trust it you can read the code, I explain below why this happens).
 3. Enter your Twitch channel name or the final part of your YouTube Live URL. Example: https://youtube.com /watch?v=V6qtereYjXFTc → code is V6qtereYjXFTc
 
 ### 🚀 Usage
@@ -61,9 +61,9 @@ It enables interactive streams where viewers can send commands to:
 - Adjust refresh rate, donation multipliers, or disable/enable command types from the interface.
 - For advanced setups, check the CFG folder where you will find configuration text files.
 
-### ⚠️ Notes
+### ⚠️ Notes and Warning
 
-- Windows may warn about the executable (no code signing certificate).
+- Windows may warn about the executable or The Windows Defender application blocked you because of the commands it uses. That's why I recommend running it as a task manager. If you   don't trust it, there's the code. You can check it. (The reason for all this is that there is no signature certificate, in short, I have no money.).
 - Donation multipliers can be configured or disabled.
 
 ### 📜 License
@@ -94,7 +94,7 @@ Permite crear streams interactivos donde tu audiencia puede:
 ### ⚙️ Instalación
 
 1. Descargas el programa arriba en el Boton que dice "Descargar", Extrae el programa en una carpeta.
-2. Ejecuta YouStreamVsChat.exe.
+2. Ejecuta YouStreamVsChat.exe en modo administrador (Porque sino te va a saltar un error, igual si tienes desconfianza puedes leer el codigo, mas abajo explico porque sucede esto).
 3. Ingresa tu canal de Twitch o el código final de la URL de tu directo en YouTube. Ejemplo: https://youtube.com /watch?v=V6qtereYjXFTc → el código es V6qtereYjXFTc
 
 ### 🚀 Opciones
@@ -102,9 +102,9 @@ Permite crear streams interactivos donde tu audiencia puede:
 - Ajusta la tasa de refresco, los multiplicadores de donación o activa/desactiva tipos de comandos desde la interfaz.
 - Para configuraciones avanzadas, revisa la carpeta CFG, donde encontrarás archivos de texto con instrucciones.
 
-### ⚠️ Notas
+### ⚠️ Notas y Precausiones
 
-- Windows puede mostrar una advertencia sobre el ejecutable (no hay certificado de firma).
+- Windows puede mostrar una advertencia sobre el ejecutable y puede que windows defender bloquee la app por los comandos que utiliza, por eso recomiendo que se ejecute como administrador de tareas y si desconfias ahi tienes el codigo, lo puedes checar (la causa de todo esto es no hay certificado de firma, en resumen no tengo dinero).
 - Los multiplicadores de donación son configurables o desactivables.
 
 ### 📜 Licencia
