@@ -1,11 +1,15 @@
 <div align="center">
+  
 ![ui](/res/Titlegit.png)
+  
 </div>
-
+<div align="center">
+  
 [![English](https://img.shields.io/badge/Language-English-blue)](##english-🇬🇧) 
 [![Español](https://img.shields.io/badge/Idioma-Español-green)](##español-🇪🇸)  
 [![Download](https://img.shields.io/badge/⬇️-Download-red)](https://github.com/tuusuario/youstreamvschat/releases/latest)
 
+</div>
 ## English-🇬🇧:
 YouStreamVsChat is a desktop application that connects your Twitch or YouTube live chat with your games or OBS.
 It enables interactive streams where viewers can send commands to:
