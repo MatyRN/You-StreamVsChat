@@ -14,6 +14,14 @@
     <img src="https://img.shields.io/badge/⬇️-Download-red?style=for-the-badge" alt="Download" />
   </a>
 </p>
+<p align="center">
+  <a href="https://cafecito.app/matiasrn" target="_blank">
+    <img src="https://img.shields.io/badge/☕-Invitar%20un%20Cafecito-orange?style=for-the-badge&logo=cafecito" alt="Cafecito" />
+  </a>
+  <a href="https://ko-fi.com/matiasrn" target="_blank">
+    <img src="https://img.shields.io/badge/☕-Buy%20Me%20a%20Coffee-orange?style=for-the-badge&logo=ko-fi" alt="Ko-fi" />
+  </a>
+</p>
 
 ## English-🇬🇧:
 YouStreamVsChat is a desktop application that connects your Twitch or YouTube live chat with your games or OBS.
@@ -35,7 +43,7 @@ It enables interactive streams where viewers can send commands to:
 
 1. Extract the program to any folder.
 2. Run YouStreamVsChat.exe.
-3. Enter your Twitch channel name or the final part of your YouTube Live URL. Example: https://youtube.com/watch?v=V6qtereYjXFTc → code is V6qtereYjXFTc
+3. Enter your Twitch channel name or the final part of your YouTube Live URL. Example: https://youtube.com /watch?v=V6qtereYjXFTc → code is V6qtereYjXFTc
 
 ### 🚀 Usage
 
@@ -74,7 +82,7 @@ Permite crear streams interactivos donde tu audiencia puede:
 
 1. Extrae el programa en una carpeta.
 2. Ejecuta YouStreamVsChat.exe.
-3. Ingresa tu canal de Twitch o el código final de la URL de tu directo en YouTube. Ejemplo: https://youtube.com/watch?v=V6qtereYjXFTc → el código es V6qtereYjXFTc
+3. Ingresa tu canal de Twitch o el código final de la URL de tu directo en YouTube. Ejemplo: https://youtube.com /watch?v=V6qtereYjXFTc → el código es V6qtereYjXFTc
 
 ### 🚀 Opciones
 
