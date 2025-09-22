@@ -7,7 +7,7 @@
 
 </div>
 
-<div align="center">
+<div align="center" width="200">
 
   ![img2](/res/Img_2.PNG)
   ![img3](/res/Img_3.PNG)
