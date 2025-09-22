@@ -2,14 +2,14 @@
   
 ![ui](/res/Titlegit.png)
 
-[Test Demo](https://www.youtube.com/watch?v=_KqlfxALWTI)
+[Test in LIVE](https://www.youtube.com/watch?v=_KqlfxALWTI)
 ![OtherVideo](res/Veracidad.gif)
 
 </div>
 
 <div align="center">
-  <img src="/res/Img_2.PNG" width="200" style="border:2px solid #000; border-radius:6px; margin:5px;">
-  <img src="/res/Img_3.PNG" width="200" style="border:2px solid #000; border-radius:6px; margin:5px;">
+  <img src="/res/Img_2.PNG" width="300" style="border:2px solid #000; border-radius:6px; margin:5px;">
+  <img src="/res/Img_3.PNG" width="300" style="border:2px solid #000; border-radius:6px; margin:5px;">
 </div>
 
 <p align="center">
