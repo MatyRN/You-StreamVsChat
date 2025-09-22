@@ -1,4 +1,4 @@
-﻿import sys, time, random, json, os, queue, threading
+import sys, time, random, json, os, queue, threading
 from tkinter import dialog
 from PySide6.QtWidgets import (QApplication, QLabel, QVBoxLayout, QWidget, QHBoxLayout, QLineEdit, QPushButton, QDialog, QMessageBox, QTextEdit, QGridLayout, QComboBox, QFrame, QMainWindow, QMenuBar, QMenu, QCheckBox, QSpinBox, QGroupBox, QFormLayout, QDialogButtonBox, QScrollArea, QDoubleSpinBox)
 from PySide6.QtCore import Qt, QTimer, Signal, Slot, QObject, QMetaObject, Q_ARG
@@ -203,7 +203,7 @@ DONATION_TIERS = {
     5: {"multiplier": 2, "color": "🔵", "name": "Mid Don", "color_hex": "#0080FF"},
     10: {"multiplier": 3, "color": "🟣", "name": "Big Don", "color_hex": "#8000FF"},
     20: {"multiplier": 4, "color": "🟠", "name": "Mega Don", "color_hex": "#FF8000"},
-    50: {"multiplier": 5, "color": "🔴", "name": "ÉPIC Don", "color_hex": "#FF0000"}
+    50: {"multiplier": 4, "color": "🔴", "name": "ÉPIC Don", "color_hex": "#FF0000"}
 }
 
 # Key mapping dictionary for the combobox
@@ -281,7 +281,7 @@ COMMAND_CONFIG = {
 
 # Variables for command spam control
 command_cooldowns = {}
-COMMAND_COOLDOWN = 3.0
+COMMAND_COOLDOWN = 2.0
 
 ## === Setup Window === ##
 class SetupDialog(QDialog):
@@ -636,11 +636,11 @@ class DonationMultipliersDialog(QDialog):
         layout.addWidget(scroll)
         
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         
-        dialog.setLayout(layout)
+        self.setLayout(layout)
     
     def update_multiplier(self, amount, multiplier):
         self.donation_tiers[amount]["multiplier"] = multiplier
@@ -649,6 +649,7 @@ class DonationMultipliersDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self, platform, video_id="", twitch_channel=""):
         super().__init__()
+        self.youtube_queue = queue.Queue(maxsize=1000)
         self.setWindowIcon(QIcon("res/Icon.ico"))
         self.platform = platform
         self.video_id = video_id
@@ -834,15 +835,16 @@ class MainWindow(QMainWindow):
     def process_youtube_chat(self):
         """Process YouTube messages from the queue (non-blocking)"""
         try:
-            while not self.youtube_queue.empty():
+            for _ in range(50):  # máximo 50 mensajes por tick
+                if self.youtube_queue.empty():
+                    break
                 msg_type, item = self.youtube_queue.get_nowait()
-                
+            
                 if msg_type == "superchat":
                     self.process_superchat(item)
                 else:
                     chat_msg = f"{item.author.name}: {item.message}"
                     self.process_normal_message(chat_msg)
-                    
         except queue.Empty:
             pass 
         except Exception as e:
@@ -853,6 +855,7 @@ class MainWindow(QMainWindow):
                 self.add_message("System: ❌ Error on YouTube, activating simulation mode")
                 self.simulation_mode = True
                 self.simulate_donations()
+
 
     def process_twitch_chat(self):
         try:
@@ -1161,7 +1164,7 @@ class MainWindow(QMainWindow):
         processed_commands = set()
     
         words = message.lower().split()
-    
+ 
         for word in words:
             for cmd_key, config in self.command_config.items():
                 command_text = config.get("command", cmd_key).lower()
@@ -1169,15 +1172,16 @@ class MainWindow(QMainWindow):
                     if cmd_key in command_cooldowns:
                         if current_time - command_cooldowns[cmd_key] < COMMAND_COOLDOWN:
                             continue
-                
+
                     if cmd_key in processed_commands:
                         continue
-                    
+
                     processed_commands.add(cmd_key)
                     command_cooldowns[cmd_key] = current_time
-                
+
                     for _ in range(multiplier):
                         self.process_game_command(cmd_key)
+
                     break
 
     def convert_to_usd(self, amount, currency):
@@ -1191,11 +1195,11 @@ class MainWindow(QMainWindow):
 
     def simulate_donations(self):
         test_donations = [
-            (2.0, "USD", "Great stream! !shoot"),
-            (5.0, "USD", "Grab a coffee !drive"),
-            (12.0, "USD", "Epic! !shoot"),
-            (25.0, "USD", "For the content !aim up"),
-            (50.0, "USD", "GREAT DONATION! KEEP IT UP! !aim right")
+            (2.0, "USD", "Great stream! !action1"),
+            (5.0, "USD", "Grab a coffee !action2"),
+            (12.0, "USD", "Epic! !action3"),
+            (25.0, "USD", "For the content !action4"),
+            (50.0, "USD", "GREAT DONATION! KEEP IT UP! !action5")
         ]
         for amount, currency, message in test_donations:
             delay = random.randint(15, 45)
