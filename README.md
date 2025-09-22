@@ -1,8 +1,7 @@
 <div align="center">
   
 ![ui](/res/Titlegit.png)
-
-[Demo Direct](https://www.youtube.com/watch?v=_KqlfxALWTI)
+[Test Demo](https://www.youtube.com/watch?v=_KqlfxALWTI)
 
 </div>
 <p align="center">
