@@ -7,11 +7,9 @@
 
 </div>
 
-<div align="center" width="200px">
-
-  ![img2](/res/Img_2.PNG)
-  ![img3](/res/Img_3.PNG)
-
+<div align="center">
+  <img src="/res/Img_2.PNG" width="200" style="border:2px solid #000; border-radius:6px; margin:5px;">
+  <img src="/res/Img_3.PNG" width="200" style="border:2px solid #000; border-radius:6px; margin:5px;">
 </div>
 
 <p align="center">
