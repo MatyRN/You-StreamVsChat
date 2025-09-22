@@ -43,7 +43,7 @@ It enables interactive streams where viewers can send commands to:
 
 ### ⚙️ Installation
 
-1. Extract the program to any folder.
+1. You download the program above in the button that says "Download", Extract the program to any folder.
 2. Run YouStreamVsChat.exe.
 3. Enter your Twitch channel name or the final part of your YouTube Live URL. Example: https://youtube.com /watch?v=V6qtereYjXFTc → code is V6qtereYjXFTc
 
@@ -84,7 +84,7 @@ Permite crear streams interactivos donde tu audiencia puede:
 
 ### ⚙️ Instalación
 
-1. Extrae el programa en una carpeta.
+1. Descargas el programa arriba en el Boton que dice "Descargar", Extrae el programa en una carpeta.
 2. Ejecuta YouStreamVsChat.exe.
 3. Ingresa tu canal de Twitch o el código final de la URL de tu directo en YouTube. Ejemplo: https://youtube.com /watch?v=V6qtereYjXFTc → el código es V6qtereYjXFTc
 
