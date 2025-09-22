@@ -9,9 +9,9 @@
 
 <div align="center">
 
-  ![img](/res/IMG_1.png)
-  ![img2](/res/IMG_2.png)
-  ![img3](/res/IMG_3.png)
+  ![img](/res/Img_1.PNG)
+  ![img2](/res/Img_2.PNG)
+  ![img3](/res/Img_3.PNG)
 
 </div>
 
